@@ -1,0 +1,21 @@
+# Ignorar arquivos Parquet
+*.parquet
+*.parquet.snappy
+
+# Ignorar diretórios comuns de dados
+/data/
+/tmp/
+
+# Ignorar arquivos temporários
+*.tmp
+*.log
+
+# Ignorar arquivos gerados pelo Jupyter Notebook
+.ipynb_checkpoints/
+
+# Ignorar arquivos do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
