@@ -1,32 +1,61 @@
 import polars as pl
 import glob
+import argparse
+import os
 
-# Definir o caminho dos arquivos Parquet
-file_pattern = "yellow_tripdata_2024-*.parquet"
+# Argumentos de linha de comando
+parser = argparse.ArgumentParser(description="Script Polars NYC")
+parser.add_argument('--input', type=str, required=True, help='Caminho para o(s) arquivo(s) de entrada')
+args = parser.parse_args()
+
+# Definir o caminho dos arquivos (pode ser um glob pattern)
+file_pattern = args.input
 files = glob.glob(file_pattern)
 
 # Carregar e padronizar datetime antes da concatenação
 dfs = []
 for file in files:
-    df = pl.read_parquet(file)
-    df = df.with_columns(
-        pl.col("tpep_pickup_datetime").cast(pl.Datetime("ms")),
-        pl.col("tpep_dropoff_datetime").cast(pl.Datetime("ms"))
-    )
+    # print(f"Lendo: {file}")
+
+    if file.endswith(".parquet"):
+        df = pl.read_parquet(file)
+        df = df.with_columns(
+            pl.col("tpep_pickup_datetime").cast(pl.Datetime("ms")),
+            pl.col("tpep_dropoff_datetime").cast(pl.Datetime("ms"))
+        )
+
+    elif file.endswith(".json") or file.endswith(".jsonl"):
+        df = pl.read_ndjson(file)
+        df = df.with_columns(
+            (pl.col("tpep_pickup_datetime") * 1000).cast(pl.Datetime("ms")),
+            (pl.col("tpep_dropoff_datetime") * 1000).cast(pl.Datetime("ms"))
+        )
+
+    elif file.endswith(".csv"):
+        df = pl.read_csv(file)
+        df = df.with_columns(
+            pl.col("tpep_pickup_datetime").str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S"),
+            pl.col("tpep_dropoff_datetime").str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S")
+        )
+
+    else:
+        print(f"❌ Formato de arquivo não suportado: {file}")
+        continue
+
     dfs.append(df)
 
-# Concatenar os arquivos após a padronização
-df = pl.concat(dfs)
+# Concatenar todos os DataFrames
+df = pl.concat(dfs, how="vertical")
 
-# Remover valores nulos
+# Remover nulos
 df = df.drop_nulls()
 
-# Criar a coluna de duração da viagem separadamente
+# Criar coluna de duração da viagem (minutos)
 df = df.with_columns(
     ((pl.col("tpep_dropoff_datetime").cast(pl.Int64) - pl.col("tpep_pickup_datetime").cast(pl.Int64)) / 60).alias("trip_duration")
 )
 
-# Agora, adicionar as demais colunas
+# Adicionar colunas derivadas
 df = df.with_columns(
     (pl.col("trip_distance") / (pl.col("trip_duration") / 60)).alias("average_speed_kmh"),
     (pl.col("fare_amount") / pl.col("trip_distance")).alias("fare_per_km"),
@@ -37,17 +66,24 @@ df = df.with_columns(
 )
 
 # Filtrar viagens inválidas
-df = df.filter((pl.col("trip_duration") > 0) &
-               (pl.col("passenger_count") > 0) &
-               (pl.col("trip_distance") > 0))
+df = df.filter(
+    (pl.col("trip_duration") > 0) &
+    (pl.col("passenger_count") > 0) &
+    (pl.col("trip_distance") > 0)
+)
 
-# Estatísticas básicas
-descriptive_stats = df.select(["trip_distance", "fare_amount", "trip_duration", "average_speed_kmh", "fare_per_km"]).describe()
+# Estatísticas descritivas
+descriptive_stats = df.select([
+    "trip_distance", "fare_amount", "trip_duration", "average_speed_kmh", "fare_per_km"
+]).describe()
+
+# Criar pasta se não existir
+output_folder = "processed_data/"
+os.makedirs(output_folder, exist_ok=True)
 
 # Salvar resultados
-output_folder = "processed_data/"
-descriptive_stats.write_csv(output_folder + "descriptive_stats.csv")
-df.write_parquet(output_folder + "nyc_taxi_processed.parquet")
+descriptive_stats.write_csv(os.path.join(output_folder, "descriptive_stats.csv"))
+df.write_parquet(os.path.join(output_folder, "nyc_taxi_processed.parquet"))
 
-# Exibir amostra dos dados processados
-print(df.head())
+# Exibir amostra
+# print(df.head())

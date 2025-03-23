@@ -5,122 +5,113 @@ import numpy as np
 import sys
 import psutil
 import threading
+from datetime import datetime  # ✅ Adicionado para timestamps com microsegundos
 
-# Lista de scripts para testar
+# Identificar o modelo do processador
+def get_cpu_model():
+    try:
+        result = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"])
+        return result.decode().strip()
+    except Exception:
+        return "Unknown"
+
+cpu_model = get_cpu_model()
+
 scripts = [
     ("pandas", "pd_nyc.py"),
     ("polars", "polars_nyc.py"),
 ]
 
-# Número de execuções
-num_execucoes = 10
-
-def monitorar_recursos(uso_cpu, uso_memoria, flag_parar, nome, execucao, resultados_granulares):
-    """Monitora CPU e Memória a cada segundo durante a execução."""
-    while not flag_parar.is_set():
-        cpu = psutil.cpu_percent(interval=1)
-        memoria = psutil.virtual_memory().percent
-        uso_cpu.append(cpu)
-        uso_memoria.append(memoria)
-        resultados_granulares.append({
-            "Biblioteca": nome,
-            "Execução": execucao,
-            "Timestamp": time.time(),
-            "CPU (%)": cpu,
-            "Memória (%)": memoria
-        })
-
-# Lista para armazenar os resultados
+num_execucoes = 1
 resultados_detalhados = []
 resultados_finais = []
-resultados_granulares = []
+uso_global = []
 
-# Função para executar um script e medir tempo, CPU e memória
-def medir_tempo(script, nome):
+def monitorar_todos_processos(lista_uso_global, flag_parar):
+    while not flag_parar.is_set():
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")  # ✅ Correto agora
+        for proc in psutil.process_iter(attrs=["pid", "ppid", "name", "cmdline", "memory_info"]):
+            try:
+                info = proc.info
+                lista_uso_global.append({
+                    "Timestamp": timestamp,
+                    "PID": info["pid"],
+                    "PPID": info["ppid"],
+                    "Nome": info["name"],
+                    "Cmdline": " ".join(info["cmdline"]) if info["cmdline"] else "",
+                    "CPU (%)": proc.cpu_percent(interval=None),
+                    "Memória (MB)": info["memory_info"].rss / (1024 * 1024)
+                })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        time.sleep(0.01)
+
+def medir_tempo(script, nome, caminho_arquivo):
     tempos = []
-    uso_cpu_exec = []
-    uso_memoria_exec = []
-
-    for i in range(num_execucoes):  # Executa várias vezes
+    for i in range(num_execucoes):
+        print(f"🚀 Executando {nome} com {caminho_arquivo} (Execução {i+1})")
         inicio = time.perf_counter()
-        uso_cpu = []
-        uso_memoria = []
-        flag_parar = threading.Event()
-        monitor_thread = threading.Thread(target=monitorar_recursos, args=(uso_cpu, uso_memoria, flag_parar, nome, i + 1, resultados_granulares))
-        monitor_thread.start()
+        timestamp_inicio = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")  # ✅ Correto
 
-        subprocess.run([sys.executable, script], check=True)  # Usa o mesmo Python da execução
+        process = subprocess.Popen([sys.executable, script, "--input", caminho_arquivo])
+        pid = process.pid
 
-        flag_parar.set()
-        monitor_thread.join()
+        process.wait()
+
         fim = time.perf_counter()
-
+        timestamp_fim = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")  # ✅ Correto
         tempo_execucao = fim - inicio
         tempos.append(tempo_execucao)
-        uso_cpu_exec.append(np.mean(uso_cpu))
-        uso_memoria_exec.append(np.mean(uso_memoria))
 
         resultados_detalhados.append({
             "Biblioteca": nome,
+            "Arquivo": caminho_arquivo,
             "Execução": i + 1,
             "Tempo (s)": tempo_execucao,
-            "CPU Média (%)": np.mean(uso_cpu),
-            "Memória Média (%)": np.mean(uso_memoria)
+            "Timestamp Início": timestamp_inicio,
+            "Timestamp Fim": timestamp_fim,
+            "PID": pid
         })
 
-    return np.mean(tempos), np.std(tempos), np.mean(uso_cpu_exec), np.mean(uso_memoria_exec)
+    return np.mean(tempos), np.std(tempos)
 
+flag_monitor_global = threading.Event()
+monitor_global_thread = threading.Thread(target=monitorar_todos_processos, args=(uso_global, flag_monitor_global))
+monitor_global_thread.start()
 
-# Executar os testes e armazenar resultados
-for nome, script in scripts:
-    media, desvio, cpu_media, memoria_media = medir_tempo(script, nome)
-    resultados_finais.append({
-        "Biblioteca": nome,
-        "Média (s)": media,
-        "Desvio Padrão (s)": desvio,
-        "CPU Média (%)": cpu_media,
-        "Memória Média (%)": memoria_media
-    })
+arquivos_para_testar = [
+    "NYC_sized/parquet/amostra_10MB.parquet",
+    "NYC_sized/parquet/amostra_100MB.parquet",
+    "NYC_sized/parquet/amostra_1000MB.parquet",
+    "NYC_sized/csv/amostra_10MB.csv",
+    "NYC_sized/csv/amostra_100MB.csv",
+    "NYC_sized/csv/amostra_1000MB.csv",
+    "NYC_sized/json/amostra_10MB.json",
+    "NYC_sized/json/amostra_100MB.json",
+    "NYC_sized/json/amostra_1000MB.json",
+]
 
-# Criar DataFrames com os resultados
-df_detalhado = pd.DataFrame(resultados_detalhados)
-df_finais = pd.DataFrame(resultados_finais)
-df_granulares = pd.DataFrame(resultados_granulares)
+for caminho_arquivo in arquivos_para_testar:
+    for nome, script in scripts:
+        media, desvio = medir_tempo(script, nome, caminho_arquivo)
+        resultados_finais.append({
+            "Biblioteca": nome,
+            "Arquivo": caminho_arquivo,
+            "Média (s)": media,
+            "Desvio Padrão (s)": desvio,
+            "Modelo CPU": cpu_model
+        })
 
-# Salvar resultados em CSV
-df_detalhado.to_csv("resultados_detalhados.csv", index=False)
-df_finais.to_csv("resultados_finais.csv", index=False)
-df_granulares.to_csv("resultados_granulares.csv", index=False)
+time.sleep(1)
+flag_monitor_global.set()
+monitor_global_thread.join()
 
-# Mensagem de conclusão
-print("Testes concluídos. Resultados salvos em 'resultados_detalhados.csv', 'resultados_finais.csv' e 'resultados_granulares.csv'.")
+pd.DataFrame(resultados_detalhados).to_csv("resultados_detalhados.csv", index=False)
+pd.DataFrame(resultados_finais).to_csv("resultados_finais.csv", index=False)
+pd.DataFrame(uso_global).to_csv("uso_global.csv", index=False)
 
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# Carregar o arquivo CSV com os dados granulares
-file_path = "resultados_granulares.csv"
-df_granulares = pd.read_csv(file_path)
-
-# Converter timestamps para iniciar no tempo 0 por execução
-df_granulares["Timestamp"] = df_granulares.groupby(["Biblioteca", "Execução"])["Timestamp"].transform(lambda x: x - x.min())
-
-# Criar o gráfico
-plt.figure(figsize=(10, 6))
-
-# Plotar a média da CPU e memória para cada ferramenta ao longo do tempo
-for biblioteca in df_granulares["Biblioteca"].unique():
-    df_bib = df_granulares[df_granulares["Biblioteca"] == biblioteca]
-    df_media = df_bib.groupby("Timestamp")[["CPU (%)", "Memória (%)"]].mean()
-    plt.plot(df_media.index, df_media["CPU (%)"], label=f"CPU {biblioteca}")
-    plt.plot(df_media.index, df_media["Memória (%)"], linestyle="dashed", label=f"Memória {biblioteca}")
-
-# Configurar rótulos e título
-plt.xlabel("Tempo de Execução (s)")
-plt.ylabel("Uso (%)")
-plt.title("Uso Médio de CPU e Memória Durante a Execução")
-plt.legend()
-plt.grid()
-
-# Exibir o gráfico
-plt.show()
+print(f"✅ Testes concluídos. CPU: {cpu_model}")
+print("📄 Resultados salvos em:")
+print(" - resultados_detalhados.csv")
+print(" - resultados_finais.csv")
+print(" - uso_global.csv")

@@ -1,13 +1,27 @@
 import pandas as pd
 import numpy as np
 import glob
+import argparse
+
+# Argumentos de linha de comando
+parser = argparse.ArgumentParser(description="Script Pandas NYC")
+parser.add_argument('--input', type=str, required=True, help='Caminho para o arquivo Parquet de entrada')
+args = parser.parse_args()
 
 # Definir o caminho dos arquivos Parquet
-file_pattern = "yellow_tripdata_2024-*.parquet"
+file_pattern = args.input
 files = glob.glob(file_pattern)
 
 # Carregar os dados de múltiplos arquivos Parquet
-df = pd.concat([pd.read_parquet(file) for file in files], ignore_index=True)
+
+if ".parquet" in file_pattern:
+    df = pd.concat([pd.read_parquet(file) for file in files], ignore_index=True)
+
+elif ".json" in file_pattern:
+    df = pd.concat([pd.read_json(file, lines=True) for file in files], ignore_index=True)
+
+else:
+    df = pd.concat([pd.read_csv(file) for file in files], ignore_index=True)
 
 # Remover valores nulos
 df.dropna(inplace=True)
@@ -44,4 +58,4 @@ descriptive_stats.to_csv(output_folder + "descriptive_stats.csv")
 df.to_parquet(output_folder + "nyc_taxi_processed.parquet", index=False)
 
 # Exibir amostra dos dados processados
-print(df.head())
+# print(df.head())
