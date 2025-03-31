@@ -1,27 +1,27 @@
 import pandas as pd
 import numpy as np
-import glob
 import argparse
+import os
 
 # Argumentos de linha de comando
 parser = argparse.ArgumentParser(description="Script Pandas NYC")
-parser.add_argument('--input', type=str, required=True, help='Caminho para o arquivo Parquet de entrada')
+parser.add_argument('--input', type=str, required=True, help='Caminho para o arquivo de entrada')
 args = parser.parse_args()
 
-# Definir o caminho dos arquivos Parquet
-file_pattern = args.input
-files = glob.glob(file_pattern)
+file = args.input
 
-# Carregar os dados de múltiplos arquivos Parquet
+# Verificação extra para debug
+# print(f"📄 Lendo arquivo: {file}")
+# print(f"📁 Existe? {os.path.exists(file)}")
 
-if ".parquet" in file_pattern:
-    df = pd.concat([pd.read_parquet(file) for file in files], ignore_index=True)
+if file.endswith(".parquet"):
+    df = pd.read_parquet(file)
 
-elif ".json" in file_pattern:
-    df = pd.concat([pd.read_json(file, lines=True) for file in files], ignore_index=True)
+elif file.endswith(".json"):
+    df = pd.read_json(file, lines=True)
 
 else:
-    df = pd.concat([pd.read_csv(file) for file in files], ignore_index=True)
+    df = pd.read_csv(file)
 
 # Remover valores nulos
 df.dropna(inplace=True)
