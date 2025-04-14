@@ -1,0 +1,8 @@
+pandas
+polars
+pyspark
+pyarrow
+requests
+tqdm
+psutil
+duckdb

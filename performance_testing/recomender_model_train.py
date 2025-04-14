@@ -1,57 +1,66 @@
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
 import joblib
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-# Reutilizar o DataFrame gerado anteriormente
+# Carregar o CSV com os dados reais
+df = pd.read_csv("/Users/lucas.lima/Documents/Projects/TCC_2/datasets_and_models_output/dataset_benchmark.csv")
 
-df_raw = pd.read_csv("../datasets_and_models_output/dataset_benchmark.csv")
+# Definir a variável alvo
+y = df["tempo_execucao"]
 
-df = df_raw.copy()
+# Definir features categóricas e numéricas
+categorical_features = ["biblioteca", "dataset_formato"]
+numeric_features = [
+    "tamanho_dataset_nominal_mb", "tamanho_dataset_bytes", "num_linhas", "num_colunas",
+    "percentual_numerico", "percentual_string", "percentual_datetime",
+    "nucleos_fisicos", "nucleos_logicos", "frequencia_cpu_max",
+    "memoria_total_mb", "disco_total_gb",
+    "tem_joins", "tem_groupby"
+]
 
-# A variável alvo será a biblioteca com melhor desempenho (menor tempo_execucao)
-# Para fins de treino, assumimos que a melhor biblioteca é aquela com menor tempo por dataset/configuração
-# Primeiro vamos ordenar e marcar a melhor opção
+# Garantir que as colunas existem no CSV
+features_existentes = [col for col in categorical_features + numeric_features if col in df.columns]
+X = df[features_existentes]
 
-df["chave_config"] = (
-    df["dataset_nome"] + "_" +
-    df["dataset_formato"] + "_" +
-    df["tamanho_dataset_nominal_mb"].astype(str)
+# Criar pré-processador para as variáveis categóricas
+categorical_cols_existentes = [col for col in categorical_features if col in X.columns]
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_cols_existentes)
+    ],
+    remainder="passthrough"
 )
 
-# Obter a melhor biblioteca por configuração (menor tempo_execucao)
-idx_melhor = df.groupby("chave_config")["tempo_execucao"].idxmin()
-df["melhor_opcao"] = False
-df.loc[idx_melhor, "melhor_opcao"] = True
+# Criar pipeline de modelo com pré-processamento + regressão
+modelo = Pipeline(steps=[
+    ("preprocessador", preprocessor),
+    ("regressor", RandomForestRegressor(n_estimators=100, random_state=42))
+])
 
-# Nosso target será 'biblioteca' onde 'melhor_opcao' é True
-df_target = df[df["melhor_opcao"]].copy()
-y = df_target["biblioteca"]
+# Separar dados em treino e teste
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Selecionar apenas colunas numéricas como features
-feature_cols = [
-    "tamanho_dataset_nominal_mb", "cpu_medio_execucao", "memoria_media_execucao",
-    "leitura_bytes", "escrita_bytes", "nucleos_fisicos", "nucleos_logicos",
-    "frequencia_cpu_max", "memoria_total_mb", "disco_total_gb",
-    "tamanho_dataset_bytes", "num_linhas", "num_colunas",
-    "percentual_numerico", "percentual_string", "percentual_datetime"
-]
-X = df_target[feature_cols]
-
-# Codificar a variável alvo
-label_encoder = LabelEncoder()
-y_encoded = label_encoder.fit_transform(y)
-
-# Treinar modelo
-X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42)
-modelo = RandomForestClassifier(n_estimators=100, random_state=42)
+# Treinar o modelo
 modelo.fit(X_train, y_train)
 
-# Salvar o modelo e o codificador
-joblib.dump(feature_cols, "../datasets_and_models_output/modelo_features.pkl")
-joblib.dump(modelo, "../datasets_and_models_output/modelo_recomendador.pkl")
-joblib.dump(label_encoder, "../datasets_and_models_output/label_encoder.pkl")
+# Avaliar o modelo
+y_pred = modelo.predict(X_test)
 
-print("Model output successfully created")
+mae = mean_absolute_error(y_test, y_pred)
+rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+r2 = r2_score(y_test, y_pred)
+
+print(f"Resultados no conjunto de teste:")
+print(f"  - MAE: {mae:.2f}")
+print(f"  - RMSE: {rmse:.2f}")
+print(f"  - R²: {r2:.2f}")
+
+# Salvar o modelo e a ordem das features
+joblib.dump(modelo, "/Users/lucas.lima/Documents/Projects/TCC_2/datasets_and_models_output/modelo_regressao_tempo_execucao.pkl")
+joblib.dump(X.columns.tolist(), "/Users/lucas.lima/Documents/Projects/TCC_2/datasets_and_models_output/modelo_regressao_features.pkl")

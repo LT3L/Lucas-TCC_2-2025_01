@@ -9,6 +9,17 @@ import os
 import uuid
 import platform
 import re
+import shutil
+import datetime
+
+BASE_DIR = os.environ.get("BASE_DIR", os.path.abspath("/app"))
+DATASET_DIR = os.environ.get("DATASET_DIR", os.path.join(BASE_DIR, "datasets"))
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(BASE_DIR, "datasets_and_models_output"))
+
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+maquina_hash = platform.node().replace(".", "_")
+nome_arquivo_saida = f"benchmark_{maquina_hash}_{timestamp}.csv"
+caminho_saida_csv = os.path.join(OUTPUT_DIR, nome_arquivo_saida)
 
 # Identificar o modelo do processador
 freq = psutil.cpu_freq()
@@ -16,20 +27,22 @@ cpu_model = f"{platform.processor()} @ {freq.current:.2f} MHz" if freq else plat
 
 # Configurações de testes por biblioteca, dataset e formatos
 scripts = [
-    # ("pandas", "pd_nyc.py", "nyc_taxi", "csv", [100, 1000, ]), # 10000, 50000]),
-    # ("pandas", "pd_nyc.py", "nyc_taxi", "parquet", [100, 1000]),
-    # ("pandas", "pd_nyc.py", "nyc_taxi", "json", [100, 1000,]),
-    # ("polars", "polars_nyc.py", "nyc_taxi", "csv", [100, 1000, ]),
-    # ("polars", "polars_nyc.py", "nyc_taxi", "parquet", [100, 1000, ]),
-    # ("polars", "polars_nyc.py", "nyc_taxi", "json", [100, 1000,  ]),
-
-    ("pyspark", "pyspark_nyc.py", "nyc_taxi", "csv", [100, 1000, ]),
-    ("pyspark", "pyspark_nyc.py", "nyc_taxi", "parquet", [100, 1000, ]),
-    ("pyspark", "pyspark_nyc.py", "nyc_taxi", "json", [100, 1000,  ]),
+    ("pandas", "performance_testing/pd_nyc.py", "nyc_taxi", "csv", [100, 1000, ]),
+    ("pandas", "performance_testing/pd_nyc.py", "nyc_taxi", "parquet", [100, 1000]),
+    ("pandas", "performance_testing/pd_nyc.py", "nyc_taxi", "json", [100, 1000,]),
+    ("polars", "performance_testing/polars_nyc.py", "nyc_taxi", "csv", [100, 1000, ]),
+    ("polars", "performance_testing/polars_nyc.py", "nyc_taxi", "parquet", [100, 1000, ]),
+    ("polars", "performance_testing/polars_nyc.py", "nyc_taxi", "json", [100, 1000,  ]),
+    ("pyspark", "performance_testing/pyspark_nyc.py", "nyc_taxi", "csv", [100, 1000, ]),
+    ("pyspark", "performance_testing/pyspark_nyc.py", "nyc_taxi", "parquet", [100, 1000, ]),
+    ("pyspark", "performance_testing/pyspark_nyc.py", "nyc_taxi", "json", [100, 1000,  ]),
+    ("duckdb", "performance_testing/duckdb_nyc.py", "nyc_taxi", "csv", [100, 1000,  ]),
+    ("duckdb", "performance_testing/duckdb_nyc.py", "nyc_taxi", "json", [100, 1000,  ]),
+    ("duckdb", "performance_testing/duckdb_nyc.py", "nyc_taxi", "parquet", [100, 1000,  ]),
 ]
 
 # Número de execuções
-num_execucoes = 1
+num_execucoes = 10
 
 def extrair_tamanho_nominal(path):
     match = re.search(r'_(\d+)(mb|gb)', path.lower())
@@ -64,15 +77,24 @@ def analisar_dataset(caminho):
     except Exception:
         return {}
 
-    tipos = df.dtypes
-    total = len(tipos)
+    # Tentar converter colunas tipo object para datetime onde possível
+    for col in df.select_dtypes(include=['object']).columns:
+        converted = pd.to_datetime(df[col], format='ISO8601', errors='coerce')
+        if converted.notna().sum() > 0.8 * len(converted):  # se ao menos 80% foram convertidos
+            df[col] = converted
+
+    total = df.shape[1]
+    numericas = df.select_dtypes(include=['number']).shape[1]
+    strings = df.select_dtypes(include=['object', 'string']).shape[1]
+    datetimes = df.select_dtypes(include=['datetime']).shape[1]
+
     return {
         "tamanho_dataset_bytes": os.path.getsize(caminho),
         "num_linhas": len(df),
-        "num_colunas": df.shape[1],
-        "percentual_numerico": tipos.isin(['int64', 'float64']).mean(),
-        "percentual_string": sum(tipos == 'object') / total,
-        "percentual_datetime": sum(tipos == 'datetime64[ns]') / total,
+        "num_colunas": total,
+        "percentual_numerico": numericas / total,
+        "percentual_string": strings / total,
+        "percentual_datetime": datetimes / total,
     }
 
 def registrar_execucao_benchmark(
@@ -102,7 +124,8 @@ def registrar_execucao_benchmark(
         **dados
     }
 
-    arquivo = "../datasets_and_models_output/dataset_benchmark.csv"
+    arquivo = caminho_saida_csv
+
     if os.path.exists(arquivo):
         df = pd.read_csv(arquivo)
         df = pd.concat([df, pd.DataFrame([registro])], ignore_index=True)
@@ -161,8 +184,11 @@ def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path):
         fim = time.perf_counter()
         tempo_execucao = fim - inicio
 
-        media_cpu = np.mean([x["CPU (%)"] for x in uso_detalhado if "CPU (%)" in x])
-        media_memoria = np.mean([x["Memória Processo (MB)"] for x in uso_detalhado if "Memória Processo (MB)" in x])
+        cpu_vals = [x["CPU (%)"] for x in uso_detalhado if "CPU (%)" in x]
+        mem_vals = [x["Memória Processo (MB)"] for x in uso_detalhado if "Memória Processo (MB)" in x]
+
+        media_cpu = np.mean(cpu_vals) if cpu_vals else 0.0
+        media_memoria = np.mean(mem_vals) if mem_vals else 0.0
         leitura_bytes = uso_detalhado[-1]["Leitura Bytes"] if uso_detalhado else 0
         escrita_bytes = uso_detalhado[-1]["Escrita Bytes"] if uso_detalhado else 0
 
@@ -180,19 +206,34 @@ def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path):
             tem_groupby=False
         )
 
+    pasta = "processed_data"
+
+    # Remove a pasta inteira (com tudo dentro)
+    if os.path.exists(pasta):
+        shutil.rmtree(pasta)
+
+    # Recria a pasta vazia (opcional)
+    os.makedirs(pasta, exist_ok=True)
+
 
 def main():
     # Executar os testes para cada tamanho
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    PROCESSED_DIR = os.path.join(BASE_DIR, "processed_data")
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+
     for nome, script, dataset_nome, dataset_formato, tamanhos in scripts:
         for tamanho in tamanhos:
 
-            dataset_path = f"/Users/lucas.lima/Documents/Projects/TCC_2/datasets/{dataset_nome}/{dataset_formato}/amostra_{tamanho}MB.{dataset_formato}"
+            dataset_path = os.path.join(DATASET_DIR, dataset_nome, dataset_formato, f"amostra_{tamanho}MB.{dataset_formato}")
 
 
             print("Running", script, nome, dataset_nome, dataset_formato, dataset_path)
             medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path)
 
-    print("Testes concluídos e dados registrados em dataset_benchmark.csv")
+    print("Testes concluídos e dados registrados em", caminho_saida_csv)
 
 
 if __name__ == "__main__":

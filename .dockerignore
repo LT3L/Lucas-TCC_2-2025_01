@@ -1,0 +1,10 @@
+datasets/
+datasets_and_models_output/
+raw/
+*.csv
+*.parquet
+*.json
+__pycache__/
+*.pkl
+*.png
+*.log

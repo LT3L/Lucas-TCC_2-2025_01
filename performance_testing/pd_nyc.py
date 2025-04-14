@@ -10,9 +10,6 @@ args = parser.parse_args()
 
 file = args.input
 
-# Verificação extra para debug
-# print(f"📄 Lendo arquivo: {file}")
-# print(f"📁 Existe? {os.path.exists(file)}")
 
 if file.endswith(".parquet"):
     df = pd.read_parquet(file)

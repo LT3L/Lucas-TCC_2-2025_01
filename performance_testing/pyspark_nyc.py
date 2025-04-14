@@ -6,11 +6,13 @@ import argparse
 import os
 
 # Você pode tornar isso configurável com uma variável de ambiente ou argumento
-driver_memory = os.environ.get("SPARK_DRIVER_MEMORY", "4g")
+import psutil
+total_ram_gb = int(psutil.virtual_memory().total / (1024 ** 3)) - 1  # subtrai 1 GB pra evitar crash
 
 spark = SparkSession.builder \
-    .appName("BenchmarkSpark") \
-    .config("spark.driver.memory", driver_memory) \
+    .appName("Benchmark") \
+    .master("local[*]") \
+    .config("spark.driver.memory", f"{total_ram_gb}g") \
     .getOrCreate()
 
 # Silenciar os WARNs

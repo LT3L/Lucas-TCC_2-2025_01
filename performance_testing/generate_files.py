@@ -10,13 +10,20 @@ def log_execution(entry, LOG_FILE='log_execucoes.jsonl'):
 def get_file_size_mb(path):
     return os.path.getsize(path) / (1024 * 1024)
 
+
 def export_sample(subset, fmt, path):
+    df = subset.copy()
+
+    # Padroniza datetime para string no formato ISO 8601 (sem milissegundos)
+    for col in df.select_dtypes(include=['datetime64[ns]', 'datetime64[ns, UTC]']).columns:
+        df[col] = df[col].dt.strftime('%Y-%m-%dT%H:%M:%S')
+
     if fmt == 'parquet':
-        subset.to_parquet(path, index=False)
+        df.to_parquet(path, index=False)
     elif fmt == 'csv':
-        subset.to_csv(path, index=False)
+        df.to_csv(path, index=False)
     elif fmt == 'json':
-        subset.to_json(path, orient='records', lines=True)
+        df.to_json(path, orient='records', lines=True)
 
 def find_row_count_for_target_size(df, fmt, target_mb, TOLERANCE=0.05):
     low, high = 100, len(df)
@@ -79,10 +86,10 @@ def find_row_count_for_target_size_fast(df, fmt, target_mb, tolerance=0.05):
     return estimated_rows  # mesmo que esteja levemente fora
 
 def generate_files():
-    TARGET_SIZES_MB = [10, 100, 1000]  # tamanhos desejados
-    FORMATS = ['parquet', 'csv', 'json']
-    INPUT_FOLDER = 'NYC_raw_download'
-    OUTPUT_FOLDER = 'NYC_sized'
+    TARGET_SIZES_MB = [10, 100, 1000, 10000]  # tamanhos desejados
+    FORMATS = [ 'csv', 'json'] # 'parquet',
+    INPUT_FOLDER = '/Users/lucas.lima/Documents/Projects/TCC_2/raw/nyc'
+    OUTPUT_FOLDER = '/Users/lucas.lima/Documents/Projects/TCC_2/datasets/nyc_taxi'
     TOLERANCE = 0.05  # 5% de tolerância no tamanho do arquivo
 
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)

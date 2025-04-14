@@ -13,22 +13,22 @@ file = args.input
 if file.endswith(".parquet"):
     df = pl.read_parquet(file)
     df = df.with_columns(
-        pl.col("tpep_pickup_datetime").cast(pl.Datetime("ms")),
-        pl.col("tpep_dropoff_datetime").cast(pl.Datetime("ms"))
+        pl.col("tpep_pickup_datetime").str.to_datetime(),
+        pl.col("tpep_dropoff_datetime").str.to_datetime()
     )
 
 elif file.endswith(".json") or file.endswith(".jsonl"):
     df = pl.read_ndjson(file)
     df = df.with_columns(
-        (pl.col("tpep_pickup_datetime") * 1000).cast(pl.Datetime("ms")),
-        (pl.col("tpep_dropoff_datetime") * 1000).cast(pl.Datetime("ms"))
+        pl.col("tpep_pickup_datetime").cast(pl.Utf8).str.to_datetime(),
+        pl.col("tpep_dropoff_datetime").cast(pl.Utf8).str.to_datetime()
     )
 
 elif file.endswith(".csv"):
     df = pl.read_csv(file)
     df = df.with_columns(
-        pl.col("tpep_pickup_datetime").str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S"),
-        pl.col("tpep_dropoff_datetime").str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S")
+        pl.col("tpep_pickup_datetime").str.to_datetime(),
+        pl.col("tpep_dropoff_datetime").str.to_datetime()
     )
 
 else:
