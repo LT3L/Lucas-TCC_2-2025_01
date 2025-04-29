@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 
 # Carregamento dos modelos salvos
-MODELO_PATH = "../datasets_and_models_output/modelo_regressao_tempo_execucao.pkl"
-FEATURES_PATH = "../datasets_and_models_output/modelo_regressao_features.pkl"
+MODELO_PATH = "/Users/lucas.lima/Documents/Projects/TCC_2/datasets_and_models_output/modelo_regressao_tempo_execucao.pkl"
+FEATURES_PATH = "/Users/lucas.lima/Documents/Projects/TCC_2/datasets_and_models_output/modelo_regressao_features.pkl"
 feature_order = joblib.load(FEATURES_PATH)
 
 modelo = joblib.load(MODELO_PATH)
@@ -98,8 +98,8 @@ def recomendar_biblioteca(dataset_path, tem_joins=False, tem_groupby=False):
     return melhor_biblioteca
 
 if __name__ == "__main__":
-    recomendar_biblioteca("/Users/lucas.lima/Documents/Projects/TCC_2/datasets/nyc_taxi/json/amostra_1000MB.json")
+    recomendar_biblioteca("/Users/lucas.lima/Documents/Projects/TCC_2/app/datasets/nyc_taxi/json/amostra_1000MB.json")
 
-    recomendar_biblioteca("/Users/lucas.lima/Documents/Projects/TCC_2/datasets/nyc_taxi/json/amostra_10MB.json")
+    recomendar_biblioteca("/Users/lucas.lima/Documents/Projects/TCC_2/app/datasets/nyc_taxi/json/amostra_10MB.json")
 
-    recomendar_biblioteca("/Users/lucas.lima/Documents/Projects/TCC_2/datasets/nyc_taxi/parquet/amostra_100MB.parquet")
+    recomendar_biblioteca("/Users/lucas.lima/Documents/Projects/TCC_2/app/datasets/nyc_taxi/parquet/amostra_100MB.parquet")

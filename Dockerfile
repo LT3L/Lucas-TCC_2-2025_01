@@ -1,9 +1,9 @@
-FROM python:3.11-slim
+FROM python:3.13-slim
 
-# Instala dependências do sistema
-RUN apt-get update && apt-get install -y \
-    curl unzip git openjdk-17-jdk \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# # Instala dependências do sistema
+# RUN apt-get update && apt-get install -y \
+#     curl unzip git openjdk-17-jdk \
+#     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -17,8 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY ./performance_testing ./performance_testing
 COPY requirements.txt .
 COPY entrypoint.sh .
-COPY log4j.properties /app/log4j.properties
-ENV SPARK_CONF_DIR=/app
+# ENV SPARK_CONF_DIR=/app
 
 # Dá permissão de execução ao entrypoint
 RUN chmod +x entrypoint.sh

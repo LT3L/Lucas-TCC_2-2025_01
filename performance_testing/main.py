@@ -11,6 +11,10 @@ import platform
 import re
 import shutil
 import datetime
+import random
+from pathlib import Path
+import hashlib
+
 
 BASE_DIR = os.environ.get("BASE_DIR", os.path.abspath("/app"))
 DATASET_DIR = os.environ.get("DATASET_DIR", os.path.join(BASE_DIR, "datasets"))
@@ -27,22 +31,85 @@ cpu_model = f"{platform.processor()} @ {freq.current:.2f} MHz" if freq else plat
 
 # Configurações de testes por biblioteca, dataset e formatos
 scripts = [
-    ("pandas", "performance_testing/pd_nyc.py", "nyc_taxi", "csv", [100, 1000, ]),
-    ("pandas", "performance_testing/pd_nyc.py", "nyc_taxi", "parquet", [100, 1000]),
-    ("pandas", "performance_testing/pd_nyc.py", "nyc_taxi", "json", [100, 1000,]),
-    ("polars", "performance_testing/polars_nyc.py", "nyc_taxi", "csv", [100, 1000, ]),
-    ("polars", "performance_testing/polars_nyc.py", "nyc_taxi", "parquet", [100, 1000, ]),
-    ("polars", "performance_testing/polars_nyc.py", "nyc_taxi", "json", [100, 1000,  ]),
-    ("pyspark", "performance_testing/pyspark_nyc.py", "nyc_taxi", "csv", [100, 1000, ]),
-    ("pyspark", "performance_testing/pyspark_nyc.py", "nyc_taxi", "parquet", [100, 1000, ]),
-    ("pyspark", "performance_testing/pyspark_nyc.py", "nyc_taxi", "json", [100, 1000,  ]),
-    ("duckdb", "performance_testing/duckdb_nyc.py", "nyc_taxi", "csv", [100, 1000,  ]),
-    ("duckdb", "performance_testing/duckdb_nyc.py", "nyc_taxi", "json", [100, 1000,  ]),
-    ("duckdb", "performance_testing/duckdb_nyc.py", "nyc_taxi", "parquet", [100, 1000,  ]),
+    ("pandas", "performance_testing/pd_fake_sales.py", "fake_sales", ["csv"], [100, 1_000, 10_000]),
+    ("polars", "performance_testing/polars_fake_sales.py", "fake_sales", ["csv"], [100, 1_000, 10_000]),
+    ("duckdb", "performance_testing/duckdb_fake_sales.py", "fake_sales", ["csv"], [100, 1_000, 10_000]),
+    # ("pyspark", "performance_testing/pyspark_fake_sales.py", "fake_sales", ["csv"], [100, 1000]),
+
+
+    # ("pandas", "performance_testing/pd_nyc.py", "nyc_taxi", ["csv", "parquet", "json"], [100, 1000]),
+    # ("pandas", "performance_testing/pd_github.py", "github_commits", ["csv", "json"], [100, 1000, 10000]), # , 10000, 50000]),
+    #
+    # ("polars", "performance_testing/polars_github.py", "github_commits", ["csv"], [100, 1000, 10000]), # , 10000, 50000]),
+    # ### , "json" Não foi usado com polars por conta de não lidar com os aninhamentos
+    # ("polars", "performance_testing/polars_nyc.py", "nyc_taxi", ["csv", "json", "parquet"], [100, 1000, ]),
+    #
+    # ("duckdb", "performance_testing/duckdb_github.py", "github_commits", ["csv", "json"], [100, 1000, 10000]), # , 10000, 50000]),
+    # ("duckdb", "performance_testing/duckdb_nyc.py", "nyc_taxi", ["csv", "parquet", "json"], [100, 1000,  ]),
+    #
+    # # ("pyspark", "performance_testing/pyspark_github.py", "github_commits", ["csv", "json"], [100, 1000, 10000]), # , 10000, 50000]),
+    # # ("pyspark", "performance_testing/pyspark_nyc.py", "nyc_taxi", "csv", [100, 1000, ]),
+    # # ("pyspark", "performance_testing/pyspark_nyc.py", "nyc_taxi", "parquet", [100, 1000, ]),
+    # # ("pyspark", "performance_testing/pyspark_nyc.py", "nyc_taxi", "json", [100, 1000,  ]),
 ]
 
+random.shuffle(scripts)
+
+MACHINE_INFO = {     # calculado uma vez
+    "cpu_model": platform.processor(),
+    "nucleos_fisicos": psutil.cpu_count(logical=False),
+    "nucleos_logicos": psutil.cpu_count(logical=True),
+    "frequencia_cpu_max": psutil.cpu_freq().max if psutil.cpu_freq() else None,
+    "memoria_total_mb": psutil.virtual_memory().total / 1024**2,
+    "disco_total_gb": psutil.disk_usage('/').total / 1024**3,
+    "sistema_operacional": platform.system(),
+}
+
+DATASET_CACHE: dict[str, dict] = {}   # ➜ evita re‐análise
+
+# utilidades ----------------------------------------------------------------
+def build_dataset_id(nome: str, formato: str, tamanho_mb: int) -> str:
+    return f"{nome}_{formato}_{tamanho_mb}MB"
+
+def analisar_dataset(caminho: str) -> dict:
+    """Lê no máximo 5 000 linhas p/ extrair estatísticas leves."""
+    if caminho in DATASET_CACHE:
+        return DATASET_CACHE[caminho]
+
+    ext = Path(caminho).suffix.lower()
+    try:
+        if ext == '.csv':
+            df = pd.read_csv(caminho, nrows=5_000)
+        elif ext == '.parquet':
+            df = pd.read_parquet(caminho, columns=None)[:5_000]
+        elif ext == '.json':
+            df = pd.read_json(caminho, lines=True).head(5_000)
+        else:
+            DATASET_CACHE[caminho] = {}
+            return {}
+    except Exception:
+        DATASET_CACHE[caminho] = {}
+        return {}
+
+    # tentativa de converter objects → datetime
+    for col in df.select_dtypes('object'):
+        conv = pd.to_datetime(df[col], errors='coerce', utc=True)
+        if conv.notna().mean() > 0.8:
+            df[col] = conv
+
+    stats = {
+        "tamanho_dataset_bytes": Path(caminho).stat().st_size,
+        "num_linhas": len(df),
+        "num_colunas": df.shape[1],
+        "percentual_numerico": df.select_dtypes('number').shape[1] / df.shape[1],
+        "percentual_string":  df.select_dtypes(['object', 'string']).shape[1] / df.shape[1],
+        "percentual_datetime": df.select_dtypes('datetime').shape[1] / df.shape[1],
+    }
+    DATASET_CACHE[caminho] = stats
+    return stats
+
 # Número de execuções
-num_execucoes = 10
+num_execucoes = 1
 
 def extrair_tamanho_nominal(path):
     match = re.search(r'_(\d+)(mb|gb)', path.lower())
@@ -52,67 +119,24 @@ def extrair_tamanho_nominal(path):
         return valor * 1024 if unidade == 'gb' else valor
     return None
 
-def coletar_caracteristicas_maquina():
-    return {
-        "cpu_model": platform.processor(),
-        "nucleos_fisicos": psutil.cpu_count(logical=False),
-        "nucleos_logicos": psutil.cpu_count(logical=True),
-        "frequencia_cpu_max": psutil.cpu_freq().max if psutil.cpu_freq() else None,
-        "memoria_total_mb": psutil.virtual_memory().total / (1024 ** 2),
-        "disco_total_gb": psutil.disk_usage('/').total / (1024 ** 3),
-        "sistema_operacional": platform.system(),
-    }
-
-def analisar_dataset(caminho):
-    ext = os.path.splitext(caminho)[1].lower()
-    try:
-        if ext == '.csv':
-            df = pd.read_csv(caminho, nrows=5000)
-        elif ext == '.parquet':
-            df = pd.read_parquet(caminho)
-        elif ext == '.json':
-            df = pd.read_json(caminho, lines=True, nrows=5000)
-        else:
-            return {}
-    except Exception:
-        return {}
-
-    # Tentar converter colunas tipo object para datetime onde possível
-    for col in df.select_dtypes(include=['object']).columns:
-        converted = pd.to_datetime(df[col], format='ISO8601', errors='coerce')
-        if converted.notna().sum() > 0.8 * len(converted):  # se ao menos 80% foram convertidos
-            df[col] = converted
-
-    total = df.shape[1]
-    numericas = df.select_dtypes(include=['number']).shape[1]
-    strings = df.select_dtypes(include=['object', 'string']).shape[1]
-    datetimes = df.select_dtypes(include=['datetime']).shape[1]
-
-    return {
-        "tamanho_dataset_bytes": os.path.getsize(caminho),
-        "num_linhas": len(df),
-        "num_colunas": total,
-        "percentual_numerico": numericas / total,
-        "percentual_string": strings / total,
-        "percentual_datetime": datetimes / total,
-    }
-
 def registrar_execucao_benchmark(
     biblioteca, dataset_path, dataset_nome, dataset_formato,
+    tamanho_nominal_mb,  # ◄- NOVO
     tempo_execucao, cpu_medio, memoria_media, leitura_bytes, escrita_bytes,
     tem_joins=False, tem_groupby=False
 ):
     id_execucao = str(uuid.uuid4())
-    maquina = coletar_caracteristicas_maquina()
-    dados = analisar_dataset(dataset_path)
-    tamanho_nominal = extrair_tamanho_nominal(dataset_path)
+
+    dataset_id = build_dataset_id(dataset_nome, dataset_formato, tamanho_nominal_mb)
+
 
     registro = {
+        "dataset_id": dataset_id,  # NOVA COLUNA
         "id_execucao": id_execucao,
         "biblioteca": biblioteca,
         "dataset_nome": dataset_nome,
         "dataset_formato": dataset_formato,
-        "tamanho_dataset_nominal_mb": tamanho_nominal,
+        "tamanho_dataset_nominal_mb": tamanho_nominal_mb,
         "tempo_execucao": tempo_execucao,
         "cpu_medio_execucao": cpu_medio,
         "memoria_media_execucao": memoria_media,
@@ -120,27 +144,22 @@ def registrar_execucao_benchmark(
         "escrita_bytes": escrita_bytes,
         "tem_joins": tem_joins,
         "tem_groupby": tem_groupby,
-        **maquina,
-        **dados
+        ** MACHINE_INFO,
+        **analisar_dataset(dataset_path)
     }
 
     arquivo = caminho_saida_csv
 
-    if os.path.exists(arquivo):
-        df = pd.read_csv(arquivo)
-        df = pd.concat([df, pd.DataFrame([registro])], ignore_index=True)
-    else:
-        df = pd.DataFrame([registro])
-
-    df.to_csv(arquivo, index=False)
+    with open(arquivo, "a") as f:
+        pd.DataFrame([registro]).to_csv(f, header=not os.path.exists(arquivo) or os.stat(arquivo).st_size == 0, index=False)
 
 def monitorar_recursos(uso_detalhado, flag_parar, nome, execucao, pid):
     process = psutil.Process(pid)
     while not flag_parar.is_set():
         try:
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S.%f")
-            cpu_usage = psutil.cpu_percent(interval=1)
-            mem_usage = process.memory_info().rss / (1024 * 1024)
+            cpu_usage = process.cpu_percent(interval=0.2)
+            mem_usage = process.memory_info().rss / 1024 ** 2
             total_mem = psutil.virtual_memory().total / (1024 * 1024)
             power_usage = None
             open_files = len(process.open_files())
@@ -162,10 +181,12 @@ def monitorar_recursos(uso_detalhado, flag_parar, nome, execucao, pid):
                 "Leitura Bytes": read_bytes,
                 "Escrita Bytes": write_bytes,
             })
+
+            time.sleep(0.2)
         except psutil.NoSuchProcess:
             break
 
-def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path):
+def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path, tamanho):
     tempos = []
     for i in range(num_execucoes):
         inicio = time.perf_counter()
@@ -198,6 +219,7 @@ def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path):
             dataset_nome=dataset_nome,
             dataset_formato=dataset_formato,
             tempo_execucao=tempo_execucao,
+            tamanho_nominal_mb=tamanho,
             cpu_medio=media_cpu,
             memoria_media=media_memoria,
             leitura_bytes=leitura_bytes,
@@ -225,13 +247,16 @@ def main():
     os.makedirs(PROCESSED_DIR, exist_ok=True)
 
     for nome, script, dataset_nome, dataset_formato, tamanhos in scripts:
-        for tamanho in tamanhos:
+        if isinstance(dataset_formato, list):
+            formatos = dataset_formato
+        else:
+            formatos = [dataset_formato]
+        for formato in formatos:
+            for tamanho in tamanhos:
+                dataset_path = os.path.join(DATASET_DIR, dataset_nome, formato, f"{tamanho}MB")
 
-            dataset_path = os.path.join(DATASET_DIR, dataset_nome, dataset_formato, f"amostra_{tamanho}MB.{dataset_formato}")
-
-
-            print("Running", script, nome, dataset_nome, dataset_formato, dataset_path)
-            medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path)
+                print("Running", script, nome, dataset_nome, formato, dataset_path)
+                medir_tempo(script, nome, dataset_nome, formato, dataset_path, tamanho)
 
     print("Testes concluídos e dados registrados em", caminho_saida_csv)
 
