@@ -16,7 +16,7 @@ from pathlib import Path
 import hashlib
 
 
-BASE_DIR = os.environ.get("BASE_DIR", os.path.abspath("/app"))
+BASE_DIR = os.environ.get("BASE_DIR", os.path.abspath("app"))
 DATASET_DIR = os.environ.get("DATASET_DIR", os.path.join(BASE_DIR, "datasets"))
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(BASE_DIR, "datasets_and_models_output"))
 
@@ -31,20 +31,23 @@ cpu_model = f"{platform.processor()} @ {freq.current:.2f} MHz" if freq else plat
 
 # Configurações de testes por biblioteca, dataset e formatos
 scripts = [
-    ("pandas", "performance_testing/pd_fake_sales.py", "fake_sales", ["csv"], [100, 1_000, 10_000]),
-    ("polars", "performance_testing/polars_fake_sales.py", "fake_sales", ["csv"], [100, 1_000, 10_000]),
-    ("duckdb", "performance_testing/duckdb_fake_sales.py", "fake_sales", ["csv"], [100, 1_000, 10_000]),
+    # ("pandas", "performance_testing/pd_fake_sales.py", "fake_sales", ["csv"], [100, 1_000]),
+    # ("polars", "performance_testing/polars_fake_sales.py", "fake_sales", ["csv"], [100, 1_000]),
+    # ("duckdb", "performance_testing/duckdb_fake_sales.py", "fake_sales", ["csv"], [100, 1_000]),
+    
     # ("pyspark", "performance_testing/pyspark_fake_sales.py", "fake_sales", ["csv"], [100, 1000]),
 
 
     # ("pandas", "performance_testing/pd_nyc.py", "nyc_taxi", ["csv", "parquet", "json"], [100, 1000]),
-    # ("pandas", "performance_testing/pd_github.py", "github_commits", ["csv", "json"], [100, 1000, 10000]), # , 10000, 50000]),
+    ("pandas", "performance_testing/pd_github.py", "github_commits", ["csv", "json", "parquet"], [100, 1000]), # , 10000, 50000]),
+    ("pandas", "performance_testing/pd_pypi.py", "pypi", ["csv", "json", "parquet"], [100, 1000]), # , 10000, 50000]),
+    
     #
-    # ("polars", "performance_testing/polars_github.py", "github_commits", ["csv"], [100, 1000, 10000]), # , 10000, 50000]),
+    # ("polars", "performance_testing/polars_github.py", "github_commits", ["csv"], [100, 1000]), # , 10000, 50000]),
     # ### , "json" Não foi usado com polars por conta de não lidar com os aninhamentos
     # ("polars", "performance_testing/polars_nyc.py", "nyc_taxi", ["csv", "json", "parquet"], [100, 1000, ]),
     #
-    # ("duckdb", "performance_testing/duckdb_github.py", "github_commits", ["csv", "json"], [100, 1000, 10000]), # , 10000, 50000]),
+    # ("duckdb", "performance_testing/duckdb_github.py", "github_commits", ["csv", "json"], [100, 1000]), # , 10000, 50000]),
     # ("duckdb", "performance_testing/duckdb_nyc.py", "nyc_taxi", ["csv", "parquet", "json"], [100, 1000,  ]),
     #
     # # ("pyspark", "performance_testing/pyspark_github.py", "github_commits", ["csv", "json"], [100, 1000, 10000]), # , 10000, 50000]),
@@ -157,7 +160,7 @@ def monitorar_recursos(uso_detalhado, flag_parar, nome, execucao, pid):
     process = psutil.Process(pid)
     while not flag_parar.is_set():
         try:
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S.%f")
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
             cpu_usage = process.cpu_percent(interval=0.2)
             mem_usage = process.memory_info().rss / 1024 ** 2
             total_mem = psutil.virtual_memory().total / (1024 * 1024)
