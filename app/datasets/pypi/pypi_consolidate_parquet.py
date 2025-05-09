@@ -5,7 +5,7 @@ import shutil
 import math
 
 # Configuration
-INPUT_DIR = "commits_export"
+INPUT_DIR = "pypi_export"
 FORMATS = ["csv", "json", "parquet"]
 SIZES_MB = [10, 100, 1000, 10000]
 SIZE_MARGIN = 0.05  # 5% margin

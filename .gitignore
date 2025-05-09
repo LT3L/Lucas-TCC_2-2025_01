@@ -1,6 +1,12 @@
 # Ignorar arquivos Parquet
 *.parquet
 *.parquet.snappy
+/app/datasets/pypi/csv/*/*.csv
+/app/datasets/pypi/json/*/*.json
+/app/datasets/pypi/parquet/*/*.parquet
+/app/datasets/github_commits/csv/*/*.csv
+/app/datasets/github_commits/json/*/*.json
+/app/datasets/github_commits/parquet/*/*.parquet
 
 # Ignorar diretórios comuns de dados
 /data/
@@ -19,3 +25,6 @@ __pycache__/
 *.pyo
 *.pyd
 .DS_Store
+
+# Ignorar diretórios do Cursor
+.idea
