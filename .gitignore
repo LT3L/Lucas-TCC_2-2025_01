@@ -1,12 +1,23 @@
 # Ignorar arquivos Parquet
 *.parquet
 *.parquet.snappy
+
 /app/datasets/pypi/csv/*/*.csv
 /app/datasets/pypi/json/*/*.json
 /app/datasets/pypi/parquet/*/*.parquet
+
 /app/datasets/github_commits/csv/*/*.csv
 /app/datasets/github_commits/json/*/*.json
 /app/datasets/github_commits/parquet/*/*.parquet
+
+/app/datasets/nyc_taxi/csv/*/*.csv
+/app/datasets/nyc_taxi/json/*/*.json
+/app/datasets/nyc_taxi/parquet/*/*.parquet
+
+/app/datasets/fake_sales/csv/*/*.csv
+/app/datasets/fake_sales/json/*/*.json
+/app/datasets/fake_sales/parquet/*/*.parquet
+
 
 # Ignorar diretórios comuns de dados
 /data/

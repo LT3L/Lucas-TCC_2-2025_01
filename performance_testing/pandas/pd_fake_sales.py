@@ -8,12 +8,6 @@ import tempfile
 import pandas as pd
 
 
-# --------------------------------------------------------------------------- #
-# leitor genérico: escolhe csv / json / parquet                               #
-# --------------------------------------------------------------------------- #
-# --------------------------------------------------------------------------- #
-# localiza arquivo customers.csv | .json | .parquet                           #
-# --------------------------------------------------------------------------- #
 def find_file(base_dir: Path, basename: str) -> Path:
     for ext in (".csv", ".json", ".parquet"):
         candidate = base_dir / f"{basename}{ext}"

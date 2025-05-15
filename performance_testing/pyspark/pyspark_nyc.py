@@ -1,18 +1,26 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, year, month, dayofmonth, hour, unix_timestamp
-
-# Criar sessão Spark
 import argparse
 import os
-
-# Você pode tornar isso configurável com uma variável de ambiente ou argumento
 import psutil
-total_ram_gb = int(psutil.virtual_memory().total / (1024 ** 3)) - 1  # subtrai 1 GB pra evitar crash
+import gc
+
+# Calculate available memory more conservatively
+total_ram_gb = int(psutil.virtual_memory().total / (1024 ** 3))
+# Use only 50% of available RAM for Spark
+spark_memory_gb = max(1, int(total_ram_gb * 0.5))
 
 spark = SparkSession.builder \
     .appName("Benchmark") \
     .master("local[*]") \
-    .config("spark.driver.memory", f"{total_ram_gb}g") \
+    .config("spark.driver.memory", f"{spark_memory_gb}g") \
+    .config("spark.executor.memory", f"{spark_memory_gb}g") \
+    .config("spark.memory.offHeap.enabled", "true") \
+    .config("spark.memory.offHeap.size", f"{spark_memory_gb}g") \
+    .config("spark.sql.shuffle.partitions", "200") \
+    .config("spark.default.parallelism", "200") \
+    .config("spark.memory.fraction", "0.6") \
+    .config("spark.memory.storageFraction", "0.5") \
     .getOrCreate()
 
 # Silenciar os WARNs
@@ -65,3 +73,12 @@ df.write.mode("overwrite").parquet(output_folder + "nyc_taxi_processed.parquet")
 
 # Exibir amostra dos dados processados
 # df.show(5)
+
+# Add cleanup at the end
+def cleanup():
+    spark.stop()
+    gc.collect()
+
+# Register cleanup function
+import atexit
+atexit.register(cleanup)
