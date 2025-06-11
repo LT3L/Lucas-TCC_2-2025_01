@@ -215,6 +215,5 @@ for size_mb in [50_000]:
         final_size = get_dir_size_mb(output_dir)
         print(f"✅ Total {format_type.upper()} size: {final_size:.2f}MB")
 
-print("\n🎉 Dataset creation completed!")
 
 print("\n🎉 Dataset creation completed!")

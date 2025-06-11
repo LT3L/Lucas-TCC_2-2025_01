@@ -39,21 +39,39 @@ cpu_model = f"{platform.processor()} @ {freq.current:.2f} MHz" if freq else plat
 
 # Configurações de testes por biblioteca, dataset e formatos
 scripts = [
-    ("pandas", "performance_testing/pandas/pd_fake_sales.py", "fake_sales", ["csv"], [100, 1_000]),
-    ("pandas", "performance_testing/pandas/pd_nyc.py", "nyc_taxi", ["csv", "parquet", "json"], [100, 1000]),
-    ("pandas", "performance_testing/pandas/pd_github.py", "github_commits", ["csv", "json", "parquet"], [100, 1000]),
-    ("pandas", "performance_testing/pandas/pd_pypi.py", "pypi", ["csv", "json", "parquet"], [100, 1000]),
+    ("pyspark", "performance_testing/pyspark/pyspark_nyc.py", "nyc_taxi", ["csv", "parquet", "json"], [100, 1_000, 10_000]),
     
-    ("polars", "performance_testing/polars/polars_fake_sales.py", "fake_sales", ["csv"], [100, 1_000]),
-    ("polars", "performance_testing/polars/polars_nyc.py", "nyc_taxi", ["csv", "parquet", "json"], [1000]),
-    ("polars", "performance_testing/polars/polars_github.py", "github_commits", ["csv", "json", "parquet"], [100, 1000]),
-    ("polars", "performance_testing/polars/polars_pypi.py", "pypi", ["csv", "json", "parquet"], [100, 1000]),
+
+    # ("pandas", "performance_testing/pandas/pd_fake_sales.py", "fake_sales", ["csv"], [100, 1_000]),
+    # ("pandas", "performance_testing/pandas/pd_nyc.py", "nyc_taxi", ["csv", "parquet", "json"], [100, 1_000, 10_000]),
+    # ("pandas", "performance_testing/pandas/pd_github.py", "github_commits", ["csv", "json", "parquet"], [100, 1_000, 10_000]),
+    # ("pandas", "performance_testing/pandas/pd_pypi.py", "pypi", ["csv", "json", "parquet"], [100, 1_000, 10_000]),
+
+    # ("pandas", "performance_testing/pandas/pd_nyc.py", "nyc_taxi", ["csv", "json"], [50_000]),
+    # ("pandas", "performance_testing/pandas/pd_github.py", "github_commits", ["csv", "json"], [50_000]),
+    # ("pandas", "performance_testing/pandas/pd_pypi.py", "pypi", ["csv", "json"], [50_000]),
     
-    ("duckdb", "performance_testing/duckdb/duckdb_fake_sales.py", "fake_sales", ["csv"], [100, 1_000]),
-    ("duckdb", "performance_testing/duckdb/duckdb_nyc.py", "nyc_taxi", ["csv", "json", "parquet"], [100, 1000]),
-    ("duckdb", "performance_testing/duckdb/duckdb_github.py", "github_commits", ["csv", "json", "parquet"], [100, 1000]),
-    ("duckdb", "performance_testing/duckdb/duckdb_pypi.py", "pypi", ["csv", "json", "parquet"], [100, 1000]),
-]
+    # ("polars", "performance_testing/polars/polars_fake_sales.py", "fake_sales", ["csv"], [100, 1_000]),
+    # ("polars", "performance_testing/polars/polars_nyc.py", "nyc_taxi", ["csv", "parquet", "json"], [100, 1_000, 10_000]),
+    # ("polars", "performance_testing/polars/polars_github.py", "github_commits", ["csv", "json", "parquet"], [100, 1_000, 10_000]),
+    # ("polars", "performance_testing/polars/polars_pypi.py", "pypi", ["csv", "json", "parquet"], [100, 1_000, 10_000]),
+
+    
+    # ("polars", "performance_testing/polars/polars_nyc.py", "nyc_taxi", ["csv", "json"], [50_000]),
+    # ("polars", "performance_testing/polars/polars_github.py", "github_commits", ["csv", "json"], [50_000]),
+    # ("polars", "performance_testing/polars/polars_pypi.py", "pypi", ["csv", "json"], [50_000]),
+    
+    # ("duckdb", "performance_testing/duckdb/duckdb_fake_sales.py", "fake_sales", ["csv"], [100, 1_000]),
+    # ("duckdb", "performance_testing/duckdb/duckdb_nyc.py", "nyc_taxi", ["csv", "json", "parquet"], [100, 1_000, 10_000]),
+    # ("duckdb", "performance_testing/duckdb/duckdb_github.py", "github_commits", ["csv", "json", "parquet"], [100, 1_000, 10_000]),
+    # ("duckdb", "performance_testing/duckdb/duckdb_pypi.py", "pypi", ["csv", "json", "parquet"], [100, 1_000, 10_000]),
+
+    
+    # ("duckdb", "performance_testing/duckdb/duckdb_nyc.py", "nyc_taxi", ["csv", "json"], [50_000]),
+    # ("duckdb", "performance_testing/duckdb/duckdb_github.py", "github_commits", ["csv", "json"], [50_000]),
+    # ("duckdb", "performance_testing/duckdb/duckdb_pypi.py", "pypi", ["csv", "json"], [50_000]),
+]   
+
 
 random.shuffle(scripts)
 
@@ -69,6 +87,145 @@ MEMORY_THRESHOLD_CRITICAL = 98.5
 MEMORY_THRESHOLD_WARNING = 97
 MEMORY_CHECK_INTERVAL = 5
 SWAP_THRESHOLD = 12
+
+# Número de execuções esperado para cada teste
+num_execucoes = 8
+
+def registrar_inicio_execucao(
+    biblioteca, dataset_path, dataset_nome, dataset_formato, tamanho_nominal_mb
+):
+    """
+    Registra o início de uma execução para detectar falhas do sistema.
+    """
+    id_execucao = str(uuid.uuid4())
+    dataset_id = build_dataset_id(dataset_nome, dataset_formato, tamanho_nominal_mb)
+    
+    # Obter estatísticas do dataset
+    try:
+        dataset_stats = analisar_dataset(dataset_path)
+    except Exception as e:
+        print(f"⚠️ Erro ao analisar dataset para início de execução: {str(e)}")
+        dataset_stats = {}
+    
+    # Criar registro básico para início de execução
+    registro = {
+        # Identificadores
+        "dataset_id": dataset_id,
+        "id_execucao": id_execucao,
+        
+        # Informações da biblioteca e dataset
+        "biblioteca": biblioteca,
+        "dataset_nome": dataset_nome,
+        "dataset_formato": dataset_formato,
+        "tamanho_dataset_nominal_mb": tamanho_nominal_mb,
+        
+        # Métricas de performance (vazias no início)
+        "tempo_execucao": 0,
+        "cpu_medio_execucao": 0,
+        "memoria_media_execucao": 0,
+        "leitura_bytes": 0,
+        "escrita_bytes": 0,
+        
+        # Flags de operação
+        "tem_joins": False,
+        "tem_groupby": False,
+        
+        # Status da execução
+        "status": "started",
+        "termination_reason": None,
+        
+        # Informações da máquina
+        **MACHINE_INFO,
+        
+        # Estatísticas do dataset
+        **dataset_stats
+    }
+
+    arquivo = caminho_saida_csv
+    with open(arquivo, "a") as f:
+        df = pd.DataFrame([registro])
+        df.to_csv(f, header=not os.path.exists(arquivo) or os.stat(arquivo).st_size == 0, index=False)
+    
+    return id_execucao
+
+def verificar_execucoes_anteriores():
+    """
+    Verifica execuções anteriores em todos os arquivos CSV de benchmark da máquina atual.
+    Agora também detecta execuções iniciadas mas não concluídas (falhas do sistema).
+    Retorna dois dicionários: um com contadores de execuções completas e outro com falhas.
+    """
+    execucoes_completas = {}
+    configuracoes_com_falhas = set()
+    
+    # Procurar por todos os arquivos CSV de benchmark desta máquina
+    if os.path.exists(OUTPUT_DIR):
+        pattern = f"benchmark_{maquina_hash}_*.csv"
+        for filename in os.listdir(OUTPUT_DIR):
+            if filename.startswith(f"benchmark_{maquina_hash}_") and filename.endswith(".csv"):
+                csv_path = os.path.join(OUTPUT_DIR, filename)
+                try:
+                    df = pd.read_csv(csv_path)
+                    if not df.empty:
+                        # Agrupar por combinação única e analisar status
+                        for _, row in df.iterrows():
+                            # Criar chave única para a combinação
+                            chave = (
+                                row.get('biblioteca', ''),
+                                row.get('dataset_nome', ''),
+                                row.get('dataset_formato', ''),
+                                row.get('tamanho_dataset_nominal_mb', 0),
+                                row.get('nucleos_fisicos', 0),
+                                row.get('nucleos_logicos', 0),
+                                row.get('memoria_total_mb', 0)
+                            )
+                            
+                            status = row.get('status', '')
+                            
+                            # Contar execuções completas separadamente
+                            if status == 'completed':
+                                execucoes_completas[chave] = execucoes_completas.get(chave, 0) + 1
+                            elif status in ['started', 'error', 'dnf']:
+                                # Marcar configuração como tendo falhas
+                                configuracoes_com_falhas.add(chave)
+                                print(f"⚠️ Configuração com falha detectada: {row.get('biblioteca', '')} - {row.get('dataset_nome', '')} ({row.get('tamanho_dataset_nominal_mb', 0)}MB {row.get('dataset_formato', '')}) - Status: {status}")
+                            
+                except Exception as e:
+                    print(f"⚠️ Erro ao ler arquivo CSV {filename}: {str(e)}")
+                    continue
+    
+    return execucoes_completas, configuracoes_com_falhas
+
+def deve_executar_teste(biblioteca, dataset_nome, dataset_formato, tamanho_mb, execucoes_completas, configuracoes_com_falhas):
+    """
+    Verifica se um teste deve ser executado baseado nas execuções anteriores.
+    Agora rejeita qualquer configuração que já teve falhas anteriormente.
+    Retorna (deve_executar, execucoes_restantes, motivo_skip).
+    """
+    chave = (
+        biblioteca,
+        dataset_nome,
+        dataset_formato,
+        tamanho_mb,
+        MACHINE_INFO["nucleos_fisicos"],
+        MACHINE_INFO["nucleos_logicos"],
+        MACHINE_INFO["memoria_total_mb"]
+    )
+    
+    # Verificar se esta configuração já teve falhas
+    if chave in configuracoes_com_falhas:
+        print(f"❌ Pulando teste (falha anterior): {biblioteca} - {dataset_nome} ({tamanho_mb}MB {dataset_formato}) - Configuração já falhou antes")
+        return False, 0, "falha_anterior"
+    
+    # Verificar execuções completas
+    execucoes_feitas = execucoes_completas.get(chave, 0)
+    execucoes_restantes = num_execucoes - execucoes_feitas
+    
+    if execucoes_restantes <= 0:
+        print(f"✅ Pulando teste (já completo): {biblioteca} - {dataset_nome} ({tamanho_mb}MB {dataset_formato}) - {execucoes_feitas}/{num_execucoes} execuções")
+        return False, 0, "ja_completo"
+    else:
+        print(f"🔄 Executando teste: {biblioteca} - {dataset_nome} ({tamanho_mb}MB {dataset_formato}) - {execucoes_feitas}/{num_execucoes} execuções (faltam {execucoes_restantes})")
+        return True, execucoes_restantes, "executar"
 
 def build_dataset_id(nome: str, formato: str, tamanho_mb: int) -> str:
     return f"{nome}_{formato}_{tamanho_mb}MB" 
@@ -285,9 +442,6 @@ def registrar_execucao_benchmark(
             # except Exception as e:
             #    print(f"Erro ao verificar arquivo CSV: {str(e)}")
 
-# Número de execuções
-num_execucoes = 10
-
 def extrair_tamanho_nominal(path):
     match = re.search(r'_(\d+)(mb|gb)', path.lower())
     if match:
@@ -412,11 +566,53 @@ def cleanup_resources():
     except Exception as e:
         print(f"Error during cleanup: {e}")
 
+def limpar_execucoes_incompletas():
+    """
+    Marca execuções com status 'started' como falhas do sistema na inicialização.
+    Isso acontece quando o sistema trava durante uma execução.
+    """
+    if not os.path.exists(OUTPUT_DIR):
+        return
+    
+    execucoes_limpas = 0
+    pattern = f"benchmark_{maquina_hash}_*.csv"
+    
+    for filename in os.listdir(OUTPUT_DIR):
+        if filename.startswith(f"benchmark_{maquina_hash}_") and filename.endswith(".csv"):
+            csv_path = os.path.join(OUTPUT_DIR, filename)
+            try:
+                df = pd.read_csv(csv_path)
+                if not df.empty:
+                    # Encontrar execuções que ficaram com status 'started'
+                    started_mask = df['status'] == 'started'
+                    if started_mask.any():
+                        # Marcar como falhas do sistema
+                        df.loc[started_mask, 'status'] = 'error'
+                        df.loc[started_mask, 'termination_reason'] = 'system_crash_detected'
+                        
+                        # Salvar o arquivo atualizado
+                        df.to_csv(csv_path, index=False)
+                        
+                        num_limpas = started_mask.sum()
+                        execucoes_limpas += num_limpas
+                        print(f"🧹 Marcadas {num_limpas} execuções incompletas como falhas do sistema em {filename}")
+                        
+            except Exception as e:
+                print(f"⚠️ Erro ao limpar execuções incompletas em {filename}: {str(e)}")
+                continue
+    
+    if execucoes_limpas > 0:
+        print(f"🧹 Total de {execucoes_limpas} execuções incompletas marcadas como falhas do sistema")
+    else:
+        print("✅ Nenhuma execução incompleta encontrada")
 
-
-def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path, tamanho):
+def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path, tamanho, execucoes_restantes=None):
+    # Se não especificado, usar o número total de execuções
+    if execucoes_restantes is None:
+        execucoes_restantes = num_execucoes
+    
     tempos = []
-    for i in range(num_execucoes):
+    for i in range(execucoes_restantes):
         if not wait_for_memory():
             print(f"Skipping execution {i+1} due to high memory usage")
             registrar_execucao_benchmark(
@@ -434,9 +630,20 @@ def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path, taman
                 termination_reason="high_initial_memory"
             )
             continue
-            
+        
+        print(f"Starting execution {i+1}/{execucoes_restantes}: {nome} - {dataset_nome} ({tamanho}MB {dataset_formato})")
+        
+        # Registrar o início da execução ANTES de começar o benchmark
+        id_execucao = registrar_inicio_execucao(
+            biblioteca=nome,
+            dataset_path=dataset_path,
+            dataset_nome=dataset_nome,
+            dataset_formato=dataset_formato,
+            tamanho_nominal_mb=tamanho
+        )
+        print(f"📝 Logged execution start with ID: {id_execucao}")
+        
         inicio = time.perf_counter()
-        print(f"Starting execution: {nome} - {dataset_nome} ({tamanho}MB {dataset_formato})")
         
         try:
             process = subprocess.Popen([sys.executable, script, "--input", dataset_path])
@@ -474,8 +681,9 @@ def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path, taman
             leitura_bytes = uso_detalhado[-1]["Leitura Bytes"] if uso_detalhado else 0
             escrita_bytes = uso_detalhado[-1]["Escrita Bytes"] if uso_detalhado else 0
 
-            print(f"Execution completed: CPU {media_cpu:.1f}%, Memory {media_memoria:.1f}MB, Swap {media_swap:.1f}%")
+            print(f"Execution {i+1} completed: CPU {media_cpu:.1f}%, Memory {media_memoria:.1f}MB, Swap {media_swap:.1f}%")
 
+            # Registrar o resultado final da execução (sobrescreverá o registro de "started")
             registrar_execucao_benchmark(
                 biblioteca=nome,
                 dataset_path=dataset_path,
@@ -493,6 +701,7 @@ def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path, taman
 
         except Exception as e:
             print(f"Error during execution: {e}")
+            # Registrar o erro (sobrescreverá o registro de "started")
             registrar_execucao_benchmark(
                 biblioteca=nome,
                 dataset_path=dataset_path,
@@ -511,6 +720,68 @@ def medir_tempo(script, nome, dataset_nome, dataset_formato, dataset_path, taman
             # Clean up after each execution
             gc.collect()
             time.sleep(2)  # Small delay between executions
+
+def mostrar_resumo_execucao(execucoes_completas, configuracoes_com_falhas):
+    """
+    Mostra um resumo do plano de execução baseado nas execuções anteriores.
+    """
+    print("\n" + "="*80)
+    print("📋 RESUMO DO PLANO DE EXECUÇÃO")
+    print("="*80)
+    
+    total_testes = 0
+    testes_a_executar = 0
+    testes_ja_completos = 0
+    testes_bloqueados_por_falhas = 0
+    
+    for nome, script, dataset_nome, dataset_formato, tamanhos in scripts:
+        if isinstance(dataset_formato, list):
+            formatos = dataset_formato
+        else:
+            formatos = [dataset_formato]
+        for formato in formatos:
+            for tamanho in tamanhos:
+                total_testes += num_execucoes
+                
+                chave = (
+                    nome,
+                    dataset_nome,
+                    formato,
+                    tamanho,
+                    MACHINE_INFO["nucleos_fisicos"],
+                    MACHINE_INFO["nucleos_logicos"],
+                    MACHINE_INFO["memoria_total_mb"]
+                )
+                
+                # Verificar se configuração tem falhas
+                if chave in configuracoes_com_falhas:
+                    testes_bloqueados_por_falhas += num_execucoes
+                    print(f"❌ {nome} - {dataset_nome} ({tamanho}MB {formato}): BLOQUEADO (falha anterior)")
+                    continue
+                
+                execucoes_feitas = execucoes_completas.get(chave, 0)
+                execucoes_restantes = num_execucoes - execucoes_feitas
+                
+                if execucoes_restantes <= 0:
+                    testes_ja_completos += num_execucoes
+                    print(f"✅ {nome} - {dataset_nome} ({tamanho}MB {formato}): COMPLETO ({execucoes_feitas}/{num_execucoes})")
+                else:
+                    testes_a_executar += execucoes_restantes
+                    if execucoes_feitas > 0:
+                        print(f"🔄 {nome} - {dataset_nome} ({tamanho}MB {formato}): PARCIAL ({execucoes_feitas}/{num_execucoes}) - Executará {execucoes_restantes}")
+                    else:
+                        print(f"🆕 {nome} - {dataset_nome} ({tamanho}MB {formato}): NOVO - Executará {execucoes_restantes}")
+    
+    print("\n" + "-"*80)
+    print(f"📊 ESTATÍSTICAS:")
+    print(f"   • Total de testes: {total_testes}")
+    print(f"   • Já completos: {testes_ja_completos}")
+    print(f"   • Bloqueados por falhas anteriores: {testes_bloqueados_por_falhas}")
+    print(f"   • A executar agora: {testes_a_executar}")
+    if total_testes > 0:
+        print(f"   • Taxa de conclusão: {(testes_ja_completos/total_testes)*100:.1f}%")
+        print(f"   • Taxa de bloqueio: {(testes_bloqueados_por_falhas/total_testes)*100:.1f}%")
+    print("="*80 + "\n")
 
 def main():
     # Register cleanup function
@@ -531,6 +802,15 @@ def main():
     os.makedirs(PROCESSED_DIR, exist_ok=True)
 
     try:
+        # Limpar execuções incompletas de execuções anteriores (falhas do sistema)
+        print("🔍 Verificando execuções incompletas de execuções anteriores...")
+        limpar_execucoes_incompletas()
+        
+        execucoes_completas, configuracoes_com_falhas = verificar_execucoes_anteriores()
+        print(f"📊 Encontradas {len(execucoes_completas)} combinações com execuções completas")
+        
+        mostrar_resumo_execucao(execucoes_completas, configuracoes_com_falhas)
+        
         for nome, script, dataset_nome, dataset_formato, tamanhos in scripts:
             if isinstance(dataset_formato, list):
                 formatos = dataset_formato
@@ -538,10 +818,11 @@ def main():
                 formatos = [dataset_formato]
             for formato in formatos:
                 for tamanho in tamanhos:
-                    dataset_path = os.path.join(DATASET_DIR, dataset_nome, formato, f"{tamanho}MB")
-
-                    print("Running", script, nome, dataset_nome, formato, dataset_path)
-                    medir_tempo(script, nome, dataset_nome, formato, dataset_path, tamanho)
+                    deve_executar, execucoes_restantes, motivo_skip = deve_executar_teste(nome, dataset_nome, formato, tamanho, execucoes_completas, configuracoes_com_falhas)
+                    if deve_executar:
+                        dataset_path = os.path.join(DATASET_DIR, dataset_nome, formato, f"{tamanho}MB")
+                        print("Running", script, nome, dataset_nome, formato, dataset_path)
+                        medir_tempo(script, nome, dataset_nome, formato, dataset_path, tamanho, execucoes_restantes)
 
         print("Testes concluídos e dados registrados em", caminho_saida_csv)
     except Exception as e:

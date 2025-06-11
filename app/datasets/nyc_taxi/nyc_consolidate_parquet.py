@@ -5,7 +5,7 @@ import shutil
 import math
 
 # Configuration
-INPUT_DIR = "raw"
+INPUT_DIR = "nyc_raw"
 FORMATS = ["csv", "json", "parquet"]
 SIZES_MB = [10, 100, 1000, 10000]
 SIZE_MARGIN = 0.05  # 5% margin
@@ -175,5 +175,43 @@ for size_mb in SIZES_MB:
         # Print final size
         final_size = get_dir_size_mb(output_dir)
         print(f"✅ Total {format_type.upper()} size: {final_size:.2f}MB")
+
+
+# Process each target size
+for size_mb in [50_000]:
+    print(f"\n🔄 Creating {size_mb}MB datasets...")
+    
+    # Handle CSV and JSON formats (process in parts)
+    for format_type in ["csv", "json"]:
+        output_dir = os.path.join(OUTPUT_DIRS[format_type], f"{size_mb}MB")
+        os.makedirs(output_dir, exist_ok=True)
+    
+        # Skip if directory already has files
+        if os.path.exists(output_dir) and os.listdir(output_dir):
+            print(f"✅ {format_type.upper()} dataset for {size_mb}MB already exists")
+            continue
+            
+        print(f"Processing {format_type.upper()} format...")
+        current_size = 0
+        part_number = 1
+        
+        for file in files:
+            if current_size >= size_mb * (1 + SIZE_MARGIN):
+                break
+                
+            file_size = process_file_in_parts(file, size_mb, format_type, 
+                                            output_dir, part_number)
+            current_size += file_size
+            part_number += 1
+            
+            print(f"✅ Created part {part_number-1:04d} from: {file}")
+        
+        # Adjust last part if needed
+        adjust_last_part(size_mb, format_type, output_dir)
+        
+        # Print final size
+        final_size = get_dir_size_mb(output_dir)
+        print(f"✅ Total {format_type.upper()} size: {final_size:.2f}MB")
+
 
 print("\n🎉 Dataset creation completed!")

@@ -9,6 +9,8 @@ import gc
 total_ram_gb = int(psutil.virtual_memory().total / (1024 ** 3))
 # Use only 50% of available RAM for Spark
 spark_memory_gb = max(1, int(total_ram_gb * 0.5))
+spark_memory_gb = 30
+print("Using Memory (GB):", spark_memory_gb)
 
 spark = SparkSession.builder \
     .appName("Benchmark") \
@@ -34,13 +36,14 @@ args = parser.parse_args()
 # Definir o caminho dos arquivos (pode ser um glob pattern)
 file = args.input
 
-if file.endswith(".parquet"):
+
+if "parquet" in file:
     df = spark.read.parquet(file)
 
-elif file.endswith(".json") or file.endswith(".jsonl"):
+elif "json" in file:
     df = spark.read.json(file)
 
-elif file.endswith(".csv"):
+elif "csv" in file:
     df = spark.read.csv(file, header=True, inferSchema=True)
 
 else:
@@ -68,7 +71,10 @@ df = df.filter((col("trip_duration") > 0) &
                (col("trip_distance") > 0))
 
 # Salvar resultados
-output_folder = "processed_data/"
+home_dir = os.path.expanduser("~")
+output_folder = os.path.join(home_dir, "processed_data")
+os.makedirs(output_folder, exist_ok=True)
+
 df.write.mode("overwrite").parquet(output_folder + "nyc_taxi_processed.parquet")
 
 # Exibir amostra dos dados processados
