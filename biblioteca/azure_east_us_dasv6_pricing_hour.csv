@@ -1,0 +1,9 @@
+Instance,vCPU(s),RAM,Temporary storage,Pay as you go,1 year reserved,3 year reserved,Spot
+D2as v6,2,"8 GiB","0 GiB","$0.0908/hour","$0.0627/hour","$0.0418/hour","$0.0127/hour"
+D4as v6,4,"16 GiB","0 GiB","$0.1820/hour","$0.1256/hour","$0.0837/hour","$0.0255/hour"
+D8as v6,8,"32 GiB","0 GiB","$0.3630/hour","$0.2505/hour","$0.1670/hour","$0.0508/hour"
+D16as v6,16,"64 GiB","0 GiB","$0.7260/hour","$0.5009/hour","$0.3340/hour","$0.1016/hour"
+D32as v6,32,"128 GiB","0 GiB","$1.4530/hour","$1.0026/hour","$0.6684/hour","$0.2034/hour"
+D48as v6,48,"192 GiB","0 GiB","$2.1790/hour","$1.5035/hour","$1.0023/hour","$0.3051/hour"
+D64as v6,64,"256 GiB","0 GiB","$2.9060/hour","$2.0051/hour","$1.3368/hour","$0.4068/hour"
+D96as v6,96,"384 GiB","0 GiB","$4.3580/hour","$3.0070/hour","$2.0047/hour","$0.6101/hour"

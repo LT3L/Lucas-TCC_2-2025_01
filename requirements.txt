@@ -6,3 +6,5 @@ requests
 tqdm
 psutil
 duckdb
+matplotlib
+seaborn

@@ -9,6 +9,7 @@ import pandas as pd
 from typing import Dict, List, Tuple
 import warnings
 import os
+import glob
 
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -27,14 +28,14 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 # 1. CAMINHOS ESTÁTICOS                                                       #
 # --------------------------------------------------------------------------- #
 CSV_PATH = (
-    "C:/Users/lucas/PycharmProjects/Lucas-TCC_2-2025_01/app/datasets_and_models_output/benchmark_WIN-KIOBB81FP3L_20250512_173438.csv"
+    "C:/Users/lucas/PycharmProjects/Lucas-TCC_2-2025_01/app/datasets_and_models_output/benchmarks/benchmark_*.csv"
 )
 MODELS_OUT_DIR = (
     "C:/Users/lucas/PycharmProjects/Lucas-TCC_2-2025_01/app/datasets_and_models_output/models/"
 )
 FEATURES_OUT = (
-    "C:/Users/lucas/PycharmProjects/Lucas-TCC_2-2025_01/app/datasets_and_models_output/"
-    "modelo_features.pkl"
+    "C:/Users/lucas/PycharmProjects/Lucas-TCC_2-2025_01/app/datasets_and_models_output/models/"
+    "recomender_features.pkl"
 )
 
 def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -76,7 +77,33 @@ def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_dataset(path: str) -> Tuple[pd.DataFrame, pd.Series, pd.Series, List[str], List[str]]:
     """Carrega e prepara o dataset para treinamento."""
-    df = pd.read_csv(path)
+    # Encontrar todos os arquivos CSV que correspondem ao padrão
+    csv_files = glob.glob(path)
+    
+    if not csv_files:
+        raise FileNotFoundError(f"Nenhum arquivo CSV encontrado no padrão: {path}")
+    
+    print(f"Arquivos CSV encontrados: {len(csv_files)}")
+    for file in csv_files:
+        print(f"  - {os.path.basename(file)}")
+    
+    # Ler e concatenar todos os arquivos CSV
+    dfs = []
+    for csv_file in csv_files:
+        try:
+            df_temp = pd.read_csv(csv_file)
+            print(f"Lido: {os.path.basename(csv_file)} - {len(df_temp)} registros")
+            dfs.append(df_temp)
+        except Exception as e:
+            print(f"Erro ao ler {csv_file}: {e}")
+            continue
+    
+    if not dfs:
+        raise ValueError("Nenhum arquivo CSV foi lido com sucesso")
+    
+    # Concatenar todos os DataFrames
+    df = pd.concat(dfs, ignore_index=True)
+    print(f"Total de registros após concatenação: {len(df)}")
 
     if "dataset_id" not in df.columns:
         raise KeyError("Coluna 'dataset_id' não encontrada no CSV — necessária para GroupKFold.")
@@ -268,37 +295,43 @@ def train_validate_save():
             champion_regressor = pipeline
             champion_regressor_name = name
 
-    # Treinar e salvar os modelos
+    # Treinar e salvar apenas os arquivos essenciais
     if champion_regressor is not None:
-        print(f"\n===== TREINANDO MODELO FINAL =====")
+        print(f"\n===== TREINANDO MODELO CAMPEÃO =====")
         print(f"Regressor Campeão: {champion_regressor_name.upper()}")
         
         # Treinar regressor com target log transformado
         champion_regressor.fit(X, y_time_log)
         
-        # Salvar modelo
-        joblib.dump(champion_regressor, os.path.join(MODELS_OUT_DIR, "modelo_regressor.pkl"), compress=3)
+        # Salvar apenas os arquivos essenciais para uso do modelo
+        print(f"\n===== SALVANDO MODELO CAMPEÃO =====")
         
-        # Salvar métricas
-        metrics = {
-            'regressor': {
-                'name': champion_regressor_name,
-                'metrics': regressor_scores[champion_regressor_name]
-            }
-        }
-        joblib.dump(metrics, os.path.join(MODELS_OUT_DIR, "metricas_modelos.pkl"), compress=3)
+        # Nomes dos arquivos seguindo o padrão do ensemble
+        model_filename = "champion_time_estimator.pkl"
+        features_filename = "recomender_features.pkl"
         
-        # Salvar features
+        # 1. Modelo treinado (essencial)
+        joblib.dump(champion_regressor, os.path.join(MODELS_OUT_DIR, model_filename), compress=3)
+        print(f"✅ Modelo salvo: {model_filename}")
+        
+        # 2. Lista de features esperadas (essencial)
         joblib.dump(X.columns.tolist(), FEATURES_OUT, compress=3)
+        print(f"✅ Features salvas: {features_filename}")
         
-        print("\n===== RESUMO FINAL =====")
-        print(f"Regressor Campeão: {champion_regressor_name.upper()}")
+        # Resumo final
+        print(f"\n===== RESUMO FINAL =====")
+        print(f"🏆 CAMPEÃO DE ESTIMATIVA DE TEMPO TREINADO")
+        print(f"Modelo base selecionado: {champion_regressor_name.upper()}")
         print(f"MAE  : {regressor_scores[champion_regressor_name]['mae_mean']:,.2f} ± "
               f"{regressor_scores[champion_regressor_name]['mae_std']:,.2f}")
         print(f"RMSE : {regressor_scores[champion_regressor_name]['rmse_mean']:,.2f} ± "
               f"{regressor_scores[champion_regressor_name]['rmse_std']:,.2f}")
         print(f"R²   : {regressor_scores[champion_regressor_name]['r2_mean']:.2f} ± "
               f"{regressor_scores[champion_regressor_name]['r2_std']:.2f}")
+        print(f"\n📁 ARQUIVOS ESSENCIAIS PARA USO DO MODELO:")
+        print(f"   • {model_filename} (modelo treinado)")
+        print(f"   • {features_filename} (lista de features)")
+        print(f"\n💡 Use estes 2 arquivos para fazer estimativas de tempo!")
 
 if __name__ == "__main__":
     train_validate_save()

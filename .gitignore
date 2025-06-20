@@ -19,6 +19,11 @@
 /app/datasets/fake_sales/parquet/*/*.parquet
 
 
+/app/datasets_and_models_output/backup/*
+/app/datasets_and_models_output/benchmarks/*
+
+/exploracao_e_graficos/*.csv
+
 # Ignorar diretórios comuns de dados
 /data/
 /tmp/
